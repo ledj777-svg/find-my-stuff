@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Search, Bookmark, Zap, ZapOff, Trash2 } from 'lucide-react'
+import { Search, Bookmark, Zap, Eye, MapPin } from 'lucide-react'
 
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -17,7 +17,7 @@ function App() {
     async function startCamera() {
       try {
         const mediaStream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'environment' }, // prefer back camera
+          video: { facingMode: 'environment' },
           audio: false
         })
         if (videoRef.current) {
@@ -115,27 +115,47 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-950 text-white flex flex-col">
       {/* Header */}
-      <header className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
-        <div className="flex items-center gap-2">
-          <Camera className="w-6 h-6 text-sky-400" />
-          <h1 className="text-lg font-semibold">Find My Stuff</h1>
+      <header className="flex items-center justify-between px-5 py-4 border-b border-gray-800/80 bg-gray-950/80 backdrop-blur-md">
+        <div className="flex items-center gap-3">
+          {/* Elegant Logo */}
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
+            <MapPin className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight leading-none">Find My Stuff</h1>
+            <p className="text-[11px] text-gray-400 mt-0.5">Visual memory for your world</p>
+          </div>
         </div>
 
-        <button
-          onClick={() => setLiveMode(!liveMode)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition ${
-            liveMode
-              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
-              : 'bg-gray-800 text-gray-300 border border-gray-700'
-          }`}
-        >
-          {liveMode ? <Zap className="w-4 h-4" /> : <ZapOff className="w-4 h-4" />}
-          {liveMode ? 'Live Mode' : 'Smart Mode'}
-        </button>
+        {/* Mode Toggle - Segmented Control Style */}
+        <div className="flex bg-gray-900 rounded-full p-1 border border-gray-800">
+          <button
+            onClick={() => setLiveMode(false)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+              !liveMode
+                ? 'bg-sky-600 text-white shadow-md'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Eye className="w-3.5 h-3.5" />
+            Smart
+          </button>
+          <button
+            onClick={() => setLiveMode(true)}
+            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
+              liveMode
+                ? 'bg-amber-500 text-black shadow-md'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Zap className="w-3.5 h-3.5" />
+            Live
+          </button>
+        </div>
       </header>
 
       {/* Camera View */}
-      <div className="relative flex-1 bg-black">
+      <div className="relative flex-1 bg-black overflow-hidden">
         <video
           ref={videoRef}
           autoPlay
@@ -146,29 +166,30 @@ function App() {
         <canvas ref={canvasRef} className="hidden" />
 
         {/* Status overlay */}
-        <div className="absolute top-3 left-3 right-3">
-          <div className="bg-black/60 backdrop-blur-sm text-sm px-3 py-1.5 rounded-lg inline-block">
+        <div className="absolute top-4 left-4">
+          <div className="bg-black/50 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
             {status}
           </div>
         </div>
 
         {liveMode && (
-          <div className="absolute top-3 right-3 bg-amber-500/90 text-black text-xs font-bold px-2 py-1 rounded">
-            LIVE • uses more credits
+          <div className="absolute top-4 right-4 bg-amber-500 text-black text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5 shadow-lg">
+            <span className="w-2 h-2 bg-black rounded-full animate-pulse"></span>
+            LIVE
           </div>
         )}
       </div>
 
       {/* Results */}
       {results.length > 0 && (
-        <div className="bg-gray-900 border-t border-gray-800 p-4 max-h-40 overflow-y-auto">
+        <div className="bg-gray-900/95 border-t border-gray-800 p-4 max-h-44 overflow-y-auto">
           {results.map((r, i) => (
-            <div key={i} className="flex items-center justify-between py-2 border-b border-gray-800 last:border-0">
+            <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-800/60 last:border-0">
               <div>
-                <p className="font-medium">{r.object}</p>
-                <p className="text-sm text-gray-400">{r.location}</p>
+                <p className="font-medium text-[15px]">{r.object}</p>
+                <p className="text-sm text-gray-400 mt-0.5">{r.location}</p>
               </div>
-              <span className="text-sky-400 text-sm">{Math.round(r.confidence * 100)}%</span>
+              <span className="text-sky-400 text-sm font-medium">{Math.round(r.confidence * 100)}%</span>
             </div>
           ))}
         </div>
@@ -177,35 +198,33 @@ function App() {
       {/* Controls */}
       <div className="bg-gray-900 border-t border-gray-800 p-4 space-y-3">
         {/* Search input */}
-        <div className="flex gap-2">
+        <div className="flex gap-2.5">
           <input
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleFind()}
             placeholder="Where is my blue charger?"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
+            className="flex-1 bg-gray-800/80 border border-gray-700 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 transition"
           />
           <button
             onClick={handleFind}
             disabled={finding || !query.trim()}
-            className="bg-sky-600 hover:bg-sky-500 disabled:opacity-50 px-4 rounded-xl flex items-center gap-2"
+            className="bg-sky-600 hover:bg-sky-500 active:scale-95 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition"
           >
             <Search className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex gap-2">
-          <button
-            onClick={handleRemember}
-            disabled={remembering}
-            className="flex-1 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 py-3 rounded-xl flex items-center justify-center gap-2 text-sm font-medium"
-          >
-            <Bookmark className="w-4 h-4" />
-            {remembering ? 'Remembering...' : 'Remember this place'}
-          </button>
-        </div>
+        {/* Remember button */}
+        <button
+          onClick={handleRemember}
+          disabled={remembering}
+          className="w-full bg-gray-800 hover:bg-gray-700 active:scale-[0.98] disabled:opacity-50 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition border border-gray-700/50"
+        >
+          <Bookmark className="w-4 h-4" />
+          {remembering ? 'Remembering...' : 'Remember this place'}
+        </button>
       </div>
     </div>
   )
