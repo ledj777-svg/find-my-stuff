@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Bookmark, Zap, Eye, MapPin, Check, Camera } from 'lucide-react'
+import { Search, Zap, Eye, MapPin, Check, Camera, RotateCcw, Save } from 'lucide-react'
 
 interface DetectedBox {
   label: string
@@ -17,11 +17,16 @@ function App() {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('Ready')
   const [results, setResults] = useState<any[]>([])
-  const [remembering, setRemembering] = useState(false)
   const [finding, setFinding] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+
+  // New Remember flow states
+  const [isSnapshot, setIsSnapshot] = useState(false)
+  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
+  const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [boxes, setBoxes] = useState<DetectedBox[]>([])
-  const [hasRemembered, setHasRemembered] = useState(false)
+  const [showReview, setShowReview] = useState(false)
+  const [savedCount, setSavedCount] = useState(0)
 
   // Start camera
   useEffect(() => {
@@ -38,7 +43,6 @@ function App() {
         }
       } catch (err) {
         setStatus('Camera permission denied')
-        console.error(err)
       }
     }
     startCamera()
@@ -50,13 +54,13 @@ function App() {
   // Auto-hide toast
   useEffect(() => {
     if (toast) {
-      const t = setTimeout(() => setToast(null), 2800)
+      const t = setTimeout(() => setToast(null), 2500)
       return () => clearTimeout(t)
     }
   }, [toast])
 
-  // Capture frame
-  const captureFrame = (): Promise<Blob | null> => {
+  // Capture frame as blob + object URL
+  const captureFrame = (): Promise<{ blob: Blob; url: string } | null> => {
     return new Promise((resolve) => {
       if (!videoRef.current || !canvasRef.current) {
         resolve(null)
@@ -69,52 +73,102 @@ function App() {
       const ctx = canvas.getContext('2d')
       if (ctx) {
         ctx.drawImage(video, 0, 0)
-        canvas.toBlob((blob) => resolve(blob), 'image/jpeg', 0.85)
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const url = URL.createObjectURL(blob)
+            resolve({ blob, url })
+          } else {
+            resolve(null)
+          }
+        }, 'image/jpeg', 0.85)
       } else {
         resolve(null)
       }
     })
   }
 
-  // Fake bounding boxes for demo
+  // Fake boxes for demo
   const generateFakeBoxes = (labels: string[]): DetectedBox[] => {
+    const positions = [
+      { x: 10, y: 15, w: 32, h: 26 },
+      { x: 55, y: 18, w: 30, h: 24 },
+      { x: 12, y: 55, w: 28, h: 22 },
+      { x: 58, y: 52, w: 30, h: 25 },
+    ]
     return labels.slice(0, 4).map((label, i) => ({
       label,
-      x: 12 + (i % 2) * 48,
-      y: 18 + Math.floor(i / 2) * 38,
-      w: 36,
-      h: 28
+      ...positions[i]
     }))
   }
 
-  // Remember
+  // ========== NEW REMEMBER FLOW ==========
   const handleRemember = async () => {
-    setRemembering(true)
-    setStatus('Analysing scene...')
-    setBoxes([])
-    const blob = await captureFrame()
-    if (!blob) {
+    // 1. Freeze frame
+    const captured = await captureFrame()
+    if (!captured) {
       setStatus('Failed to capture')
-      setRemembering(false)
       return
     }
 
+    setSnapshotUrl(captured.url)
+    setIsSnapshot(true)
+    setIsAnalyzing(true)
+    setBoxes([])
+    setShowReview(false)
+    setStatus('Analyzing...')
+
+    // 2. Call backend (mock)
     const formData = new FormData()
-    formData.append('file', blob, 'frame.jpg')
+    formData.append('file', captured.blob, 'frame.jpg')
     formData.append('location', 'Current view')
 
     try {
       const res = await fetch('/api/remember', { method: 'POST', body: formData })
       const data = await res.json()
-      const objects = data.objects || []
-      setBoxes(generateFakeBoxes(objects))
-      setHasRemembered(true)
-      setToast(`Remembered ${objects.length} objects`)
-      setStatus('Camera ready')
+      const objects = data.objects || ['blue charger', 'black notebook', 'keys', 'silver pen']
+
+      // 3. Simulate scanning delay then show boxes one by one
+      await new Promise(r => setTimeout(r, 1200))
+
+      setIsAnalyzing(false)
+      setShowReview(true)
+
+      // Pop boxes in one by one
+      const fakeBoxes = generateFakeBoxes(objects)
+      for (let i = 0; i < fakeBoxes.length; i++) {
+        await new Promise(r => setTimeout(r, 280))
+        setBoxes(prev => [...prev, fakeBoxes[i]])
+      }
+
+      setStatus(`${objects.length} objects found`)
     } catch (err) {
-      setStatus('Remember failed')
+      setIsAnalyzing(false)
+      setStatus('Analysis failed')
     }
-    setRemembering(false)
+  }
+
+  // Save the snapshot to memory
+  const handleSave = () => {
+    setSavedCount(prev => prev + 1)
+    setToast('Saved on your device')
+    // Reset to live camera
+    if (snapshotUrl) URL.revokeObjectURL(snapshotUrl)
+    setSnapshotUrl(null)
+    setIsSnapshot(false)
+    setBoxes([])
+    setShowReview(false)
+    setStatus('Camera ready')
+  }
+
+  // Retake
+  const handleRetake = () => {
+    if (snapshotUrl) URL.revokeObjectURL(snapshotUrl)
+    setSnapshotUrl(null)
+    setIsSnapshot(false)
+    setBoxes([])
+    setShowReview(false)
+    setIsAnalyzing(false)
+    setStatus('Camera ready')
   }
 
   // Find
@@ -123,24 +177,18 @@ function App() {
     setFinding(true)
     setStatus(`Searching for "${query}"...`)
     setResults([])
-    setBoxes([])
 
-    const blob = await captureFrame()
+    const captured = await captureFrame()
     const formData = new FormData()
     formData.append('query', query)
-    if (blob) formData.append('file', blob, 'frame.jpg')
+    if (captured) formData.append('file', captured.blob, 'frame.jpg')
 
     try {
       const res = await fetch('/api/find', { method: 'POST', body: formData })
       const data = await res.json()
       const matches = data.matches || []
       setResults(matches)
-      if (matches.length > 0) {
-        setBoxes(generateFakeBoxes(matches.map((m: any) => m.object)))
-        setStatus(`Found ${matches.length} match(es)`)
-      } else {
-        setStatus('No matches found')
-      }
+      setStatus(matches.length ? `Found ${matches.length} match(es)` : 'No matches found')
     } catch (err) {
       setStatus('Find failed')
     }
@@ -157,7 +205,9 @@ function App() {
           </div>
           <div>
             <h1 className="text-lg font-semibold tracking-tight leading-none">Find My Stuff</h1>
-            <p className="text-[11px] text-gray-400 mt-0.5">Visual memory for your world</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">
+              {savedCount > 0 ? `${savedCount} place${savedCount > 1 ? 's' : ''} saved` : 'Visual memory for your world'}
+            </p>
           </div>
         </div>
 
@@ -183,24 +233,45 @@ function App() {
         </div>
       </header>
 
-      {/* Camera */}
+      {/* Main View */}
       <div className="relative flex-1 min-h-0 bg-black overflow-hidden">
+        {/* Live camera (hidden when snapshot is active) */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
+          className={`w-full h-full object-cover ${isSnapshot ? 'hidden' : 'block'}`}
         />
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Bounding boxes overlay */}
+        {/* Frozen Snapshot */}
+        {isSnapshot && snapshotUrl && (
+          <img
+            src={snapshotUrl}
+            alt="Snapshot"
+            className="w-full h-full object-cover"
+          />
+        )}
+
+        {/* Scanning animation overlay */}
+        {isAnalyzing && (
+          <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center">
+            <div className="w-full h-1 bg-sky-500/80 absolute top-0 animate-[scan_1.4s_ease-in-out_infinite]" 
+                 style={{ boxShadow: '0 0 20px 4px rgba(14,165,233,0.6)' }} />
+            <p className="text-white text-sm font-medium bg-black/50 px-4 py-2 rounded-full backdrop-blur">
+              Analyzing scene...
+            </p>
+          </div>
+        )}
+
+        {/* Bounding boxes / pins on snapshot */}
         {boxes.length > 0 && (
           <div className="absolute inset-0 pointer-events-none">
             {boxes.map((box, i) => (
               <div
                 key={i}
-                className="absolute border-2 border-sky-400 rounded-md"
+                className="absolute border-2 border-sky-400 rounded-lg transition-all duration-300"
                 style={{
                   left: `${box.x}%`,
                   top: `${box.y}%`,
@@ -208,7 +279,7 @@ function App() {
                   height: `${box.h}%`,
                 }}
               >
-                <span className="absolute -top-6 left-0 bg-sky-500 text-white text-[11px] font-medium px-2 py-0.5 rounded-md whitespace-nowrap">
+                <span className="absolute -top-7 left-0 bg-sky-500 text-white text-[11px] font-semibold px-2 py-0.5 rounded-md shadow">
                   {box.label}
                 </span>
               </div>
@@ -216,22 +287,17 @@ function App() {
           </div>
         )}
 
-        {/* Status */}
-        <div className="absolute top-4 left-4">
-          <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
-            {status}
-          </div>
-        </div>
-
-        {liveMode && (
-          <div className="absolute top-4 right-4 bg-sky-500 text-white text-xs font-bold px-3 py-1.5 rounded-full flex items-center gap-1.5">
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-            LIVE
+        {/* Status pill */}
+        {!isAnalyzing && (
+          <div className="absolute top-4 left-4">
+            <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
+              {status}
+            </div>
           </div>
         )}
 
-        {/* Empty state hint */}
-        {!hasRemembered && boxes.length === 0 && (
+        {/* Empty hint (only on live camera) */}
+        {!isSnapshot && savedCount === 0 && (
           <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none">
             <div className="bg-black/60 backdrop-blur-md text-sm text-gray-200 px-4 py-2 rounded-full border border-white/10">
               Point at a place and tap <span className="text-sky-400 font-medium">Remember</span>
@@ -242,7 +308,7 @@ function App() {
 
       {/* Toast */}
       {toast && (
-        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 animate-in fade-in slide-in-from-top-2">
+        <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg">
             <Check className="w-4 h-4" />
             {toast}
@@ -250,14 +316,14 @@ function App() {
         </div>
       )}
 
-      {/* Results */}
-      {results.length > 0 && (
-        <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-3 max-h-40 overflow-y-auto space-y-2">
+      {/* Results from search */}
+      {results.length > 0 && !isSnapshot && (
+        <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-3 max-h-36 overflow-y-auto space-y-2">
           {results.map((r, i) => (
             <div key={i} className="flex items-center justify-between bg-gray-800/60 rounded-xl px-3.5 py-2.5">
               <div>
                 <p className="font-medium text-[15px]">{r.object}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{r.location} · last seen just now</p>
+                <p className="text-xs text-gray-400">{r.location}</p>
               </div>
               <span className="text-sky-400 text-sm font-semibold">{Math.round(r.confidence * 100)}%</span>
             </div>
@@ -265,36 +331,69 @@ function App() {
         </div>
       )}
 
-      {/* Controls */}
+      {/* Bottom Controls */}
       <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-4 space-y-3">
-        <div className="flex gap-2.5">
-          <input
-            type="text"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleFind()}
-            placeholder="Where is my blue charger?"
-            className="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/40 transition"
-          />
-          <button
-            onClick={handleFind}
-            disabled={finding || !query.trim()}
-            className="bg-sky-600 hover:bg-sky-500 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition active:scale-95"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-        </div>
+        {/* Review mode: Save / Retake */}
+        {showReview ? (
+          <div className="flex gap-3">
+            <button
+              onClick={handleRetake}
+              className="flex-1 bg-gray-800 hover:bg-gray-700 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium border border-gray-700 transition"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Retake
+            </button>
+            <button
+              onClick={handleSave}
+              className="flex-1 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold shadow-lg shadow-sky-600/20 transition"
+            >
+              <Save className="w-4 h-4" />
+              Save to memory
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* Search */}
+            <div className="flex gap-2.5">
+              <input
+                type="text"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleFind()}
+                placeholder="Where is my blue charger?"
+                disabled={isSnapshot}
+                className="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 transition disabled:opacity-50"
+              />
+              <button
+                onClick={handleFind}
+                disabled={finding || !query.trim() || isSnapshot}
+                className="bg-sky-600 hover:bg-sky-500 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition"
+              >
+                <Search className="w-5 h-5" />
+              </button>
+            </div>
 
-        {/* Primary CTA - gradient */}
-        <button
-          onClick={handleRemember}
-          disabled={remembering}
-          className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 disabled:opacity-50 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition shadow-lg shadow-sky-600/20 active:scale-[0.98]"
-        >
-          <Camera className="w-4 h-4" />
-          {remembering ? 'Analysing...' : 'Remember this place'}
-        </button>
+            {/* Remember button */}
+            <button
+              onClick={handleRemember}
+              disabled={isSnapshot || isAnalyzing}
+              className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 disabled:opacity-50 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition shadow-lg shadow-sky-600/20"
+            >
+              <Camera className="w-4 h-4" />
+              {isAnalyzing ? 'Analyzing...' : 'Remember this place'}
+            </button>
+          </>
+        )}
       </div>
+
+      {/* Tiny CSS for scan line */}
+      <style>{`
+        @keyframes scan {
+          0% { top: 0%; opacity: 0.8; }
+          50% { opacity: 1; }
+          100% { top: 100%; opacity: 0.6; }
+        }
+      `}</style>
     </div>
   )
 }
