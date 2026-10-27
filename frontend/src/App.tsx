@@ -113,11 +113,10 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col">
+    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-4 border-b border-gray-800/80 bg-gray-950/80 backdrop-blur-md">
+      <header className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-gray-800/80 bg-gray-950">
         <div className="flex items-center gap-3">
-          {/* Elegant Logo */}
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/20">
             <MapPin className="w-5 h-5 text-white" />
           </div>
@@ -127,7 +126,7 @@ function App() {
           </div>
         </div>
 
-        {/* Mode Toggle - Segmented Control Style */}
+        {/* Mode Toggle */}
         <div className="flex bg-gray-900 rounded-full p-1 border border-gray-800">
           <button
             onClick={() => setLiveMode(false)}
@@ -154,8 +153,8 @@ function App() {
         </div>
       </header>
 
-      {/* Camera View */}
-      <div className="relative flex-1 bg-black overflow-hidden">
+      {/* Camera View - takes remaining space but can shrink */}
+      <div className="relative flex-1 min-h-0 bg-black overflow-hidden">
         <video
           ref={videoRef}
           autoPlay
@@ -180,14 +179,14 @@ function App() {
         )}
       </div>
 
-      {/* Results */}
+      {/* Results (only when there are results) */}
       {results.length > 0 && (
-        <div className="bg-gray-900/95 border-t border-gray-800 p-4 max-h-44 overflow-y-auto">
+        <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-3 max-h-36 overflow-y-auto">
           {results.map((r, i) => (
-            <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-800/60 last:border-0">
+            <div key={i} className="flex items-center justify-between py-2 border-b border-gray-800/60 last:border-0">
               <div>
                 <p className="font-medium text-[15px]">{r.object}</p>
-                <p className="text-sm text-gray-400 mt-0.5">{r.location}</p>
+                <p className="text-sm text-gray-400">{r.location}</p>
               </div>
               <span className="text-sky-400 text-sm font-medium">{Math.round(r.confidence * 100)}%</span>
             </div>
@@ -195,9 +194,8 @@ function App() {
         </div>
       )}
 
-      {/* Controls */}
-      <div className="bg-gray-900 border-t border-gray-800 p-4 space-y-3">
-        {/* Search input */}
+      {/* Controls - always visible */}
+      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-4 space-y-3">
         <div className="flex gap-2.5">
           <input
             type="text"
@@ -205,22 +203,21 @@ function App() {
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleFind()}
             placeholder="Where is my blue charger?"
-            className="flex-1 bg-gray-800/80 border border-gray-700 rounded-2xl px-4 py-3.5 text-sm focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500/30 transition"
+            className="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 transition"
           />
           <button
             onClick={handleFind}
             disabled={finding || !query.trim()}
-            className="bg-sky-600 hover:bg-sky-500 active:scale-95 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition"
+            className="bg-sky-600 hover:bg-sky-500 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition"
           >
             <Search className="w-5 h-5" />
           </button>
         </div>
 
-        {/* Remember button */}
         <button
           onClick={handleRemember}
           disabled={remembering}
-          className="w-full bg-gray-800 hover:bg-gray-700 active:scale-[0.98] disabled:opacity-50 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition border border-gray-700/50"
+          className="w-full bg-gray-800 hover:bg-gray-700 disabled:opacity-50 py-3 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium transition border border-gray-700"
         >
           <Bookmark className="w-4 h-4" />
           {remembering ? 'Remembering...' : 'Remember this place'}
