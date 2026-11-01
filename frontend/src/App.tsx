@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Zap, Eye, MapPin, Check, Camera, RotateCcw, Save } from 'lucide-react'
+import { MapPin, Check, Mic, Camera, X } from 'lucide-react'
+
+interface MemoryItem {
+  id: string
+  imageUrl: string
+  objects: string[]
+  timestamp: number
+  placeName: string
+}
 
 interface DetectedBox {
   label: string
@@ -12,21 +20,19 @@ interface DetectedBox {
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const pressTimer = useRef<NodeJS.Timeout | null>(null)
+  const isLongPress = useRef(false)
+
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [liveMode, setLiveMode] = useState(false)
-  const [query, setQuery] = useState('')
   const [status, setStatus] = useState('Ready')
-  const [results, setResults] = useState<any[]>([])
-  const [finding, setFinding] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
-
-  // New Remember flow states
-  const [isSnapshot, setIsSnapshot] = useState(false)
-  const [snapshotUrl, setSnapshotUrl] = useState<string | null>(null)
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
+  const [listening, setListening] = useState(false)
+  const [transcript, setTranscript] = useState('')
   const [boxes, setBoxes] = useState<DetectedBox[]>([])
-  const [showReview, setShowReview] = useState(false)
-  const [savedCount, setSavedCount] = useState(0)
+  const [memory, setMemory] = useState<MemoryItem[]>([])
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [reply, setReply] = useState<string | null>(null)
 
   // Start camera
   useEffect(() => {
@@ -39,7 +45,7 @@ function App() {
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream
           setStream(mediaStream)
-          setStatus('Camera ready')
+          setStatus('Ready')
         }
       } catch (err) {
         setStatus('Camera permission denied')
@@ -59,7 +65,15 @@ function App() {
     }
   }, [toast])
 
-  // Capture frame as blob + object URL
+  // Auto-hide reply
+  useEffect(() => {
+    if (reply) {
+      const t = setTimeout(() => setReply(null), 5000)
+      return () => clearTimeout(t)
+    }
+  }, [reply])
+
+  // Capture current frame
   const captureFrame = (): Promise<{ blob: Blob; url: string } | null> => {
     return new Promise((resolve) => {
       if (!videoRef.current || !canvasRef.current) {
@@ -77,122 +91,151 @@ function App() {
           if (blob) {
             const url = URL.createObjectURL(blob)
             resolve({ blob, url })
-          } else {
-            resolve(null)
-          }
+          } else resolve(null)
         }, 'image/jpeg', 0.85)
-      } else {
-        resolve(null)
-      }
+      } else resolve(null)
     })
   }
 
-  // Fake boxes for demo
-  const generateFakeBoxes = (labels: string[]): DetectedBox[] => {
-    const positions = [
-      { x: 10, y: 15, w: 32, h: 26 },
-      { x: 55, y: 18, w: 30, h: 24 },
-      { x: 12, y: 55, w: 28, h: 22 },
-      { x: 58, y: 52, w: 30, h: 25 },
-    ]
-    return labels.slice(0, 4).map((label, i) => ({
-      label,
-      ...positions[i]
-    }))
-  }
-
-  // ========== NEW REMEMBER FLOW ==========
-  const handleRemember = async () => {
-    // 1. Freeze frame
-    const captured = await captureFrame()
-    if (!captured) {
-      setStatus('Failed to capture')
+  // Start voice recognition
+  const startListening = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    if (!SpeechRecognition) {
+      setToast('Voice not supported in this browser')
       return
     }
 
-    setSnapshotUrl(captured.url)
-    setIsSnapshot(true)
-    setIsAnalyzing(true)
-    setBoxes([])
-    setShowReview(false)
-    setStatus('Analyzing...')
+    const recognition = new SpeechRecognition()
+    recognition.lang = 'en-US'
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
 
-    // 2. Call backend (mock)
-    const formData = new FormData()
-    formData.append('file', captured.blob, 'frame.jpg')
-    formData.append('location', 'Current view')
-
-    try {
-      const res = await fetch('/api/remember', { method: 'POST', body: formData })
-      const data = await res.json()
-      const objects = data.objects || ['blue charger', 'black notebook', 'keys', 'silver pen']
-
-      // 3. Simulate scanning delay then show boxes one by one
-      await new Promise(r => setTimeout(r, 1200))
-
-      setIsAnalyzing(false)
-      setShowReview(true)
-
-      // Pop boxes in one by one
-      const fakeBoxes = generateFakeBoxes(objects)
-      for (let i = 0; i < fakeBoxes.length; i++) {
-        await new Promise(r => setTimeout(r, 280))
-        setBoxes(prev => [...prev, fakeBoxes[i]])
-      }
-
-      setStatus(`${objects.length} objects found`)
-    } catch (err) {
-      setIsAnalyzing(false)
-      setStatus('Analysis failed')
+    recognition.onstart = () => {
+      setListening(true)
+      setTranscript('')
+      setStatus('Listening...')
     }
+
+    recognition.onresult = (event: any) => {
+      const text = event.results[0][0].transcript
+      setTranscript(text)
+      handleVoiceQuery(text)
+    }
+
+    recognition.onerror = () => {
+      setListening(false)
+      setStatus(liveMode ? 'Live Mode' : 'Ready')
+    }
+
+    recognition.onend = () => {
+      setListening(false)
+      setStatus(liveMode ? 'Live Mode' : 'Ready')
+    }
+
+    recognition.start()
   }
 
-  // Save the snapshot to memory
-  const handleSave = () => {
-    setSavedCount(prev => prev + 1)
-    setToast('Saved on your device')
-    // Reset to live camera
-    if (snapshotUrl) URL.revokeObjectURL(snapshotUrl)
-    setSnapshotUrl(null)
-    setIsSnapshot(false)
+  // Handle voice query
+  const handleVoiceQuery = async (text: string) => {
+    setIsProcessing(true)
+    setStatus('Searching...')
     setBoxes([])
-    setShowReview(false)
-    setStatus('Camera ready')
+    setReply(null)
+
+    // Simple mock logic for now
+    const lower = text.toLowerCase()
+    const isFindQuery = lower.includes('where') || lower.includes('find') || lower.includes('key') || lower.includes('charger') || lower.includes('notebook')
+
+    if (isFindQuery) {
+      // Fake detection
+      await new Promise(r => setTimeout(r, 900))
+
+      const fakeBox = {
+        label: lower.includes('key') ? 'car keys' : lower.includes('charger') ? 'blue charger' : 'object',
+        x: 30,
+        y: 35,
+        w: 28,
+        h: 22
+      }
+      setBoxes([fakeBox])
+
+      if (memory.length > 0) {
+        setReply(`I can see the ${fakeBox.label} nearby. You also saved it earlier.`)
+      } else {
+        setReply(`I can see the ${fakeBox.label} right here.`)
+      }
+      setStatus('Found')
+    } else {
+      setReply("I heard you. Try saying: Where is my car key?")
+      setStatus(liveMode ? 'Live Mode' : 'Ready')
+    }
+
+    setIsProcessing(false)
   }
 
-  // Retake
-  const handleRetake = () => {
-    if (snapshotUrl) URL.revokeObjectURL(snapshotUrl)
-    setSnapshotUrl(null)
-    setIsSnapshot(false)
+  // Short press = Capture + save + start voice
+  const handleShortPress = async () => {
+    setIsProcessing(true)
+    setStatus('Saving...')
     setBoxes([])
-    setShowReview(false)
-    setIsAnalyzing(false)
-    setStatus('Camera ready')
-  }
-
-  // Find
-  const handleFind = async () => {
-    if (!query.trim()) return
-    setFinding(true)
-    setStatus(`Searching for "${query}"...`)
-    setResults([])
 
     const captured = await captureFrame()
-    const formData = new FormData()
-    formData.append('query', query)
-    if (captured) formData.append('file', captured.blob, 'frame.jpg')
-
-    try {
-      const res = await fetch('/api/find', { method: 'POST', body: formData })
-      const data = await res.json()
-      const matches = data.matches || []
-      setResults(matches)
-      setStatus(matches.length ? `Found ${matches.length} match(es)` : 'No matches found')
-    } catch (err) {
-      setStatus('Find failed')
+    if (!captured) {
+      setStatus('Capture failed')
+      setIsProcessing(false)
+      return
     }
-    setFinding(false)
+
+    // Save to memory (mock objects for now)
+    const newItem: MemoryItem = {
+      id: Date.now().toString(),
+      imageUrl: captured.url,
+      objects: ['blue charger', 'keys', 'notebook'],
+      timestamp: Date.now(),
+      placeName: 'Current place'
+    }
+    setMemory(prev => [newItem, ...prev])
+
+    setToast('Saved on your device')
+    setStatus('Ready')
+    setIsProcessing(false)
+
+    // Auto start voice
+    setTimeout(() => startListening(), 400)
+  }
+
+  // Long press = Live Mode + voice
+  const handleLongPress = () => {
+    setLiveMode(true)
+    setStatus('Live Mode')
+    setToast('Live Mode on')
+    setTimeout(() => startListening(), 300)
+  }
+
+  // Button press handlers
+  const onPressStart = () => {
+    isLongPress.current = false
+    pressTimer.current = setTimeout(() => {
+      isLongPress.current = true
+      handleLongPress()
+    }, 1500)
+  }
+
+  const onPressEnd = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current)
+      pressTimer.current = null
+    }
+    if (!isLongPress.current) {
+      handleShortPress()
+    }
+  }
+
+  const exitLiveMode = () => {
+    setLiveMode(false)
+    setStatus('Ready')
+    setBoxes([])
+    setListening(false)
   }
 
   return (
@@ -206,72 +249,41 @@ function App() {
           <div>
             <h1 className="text-lg font-semibold tracking-tight leading-none">Find My Stuff</h1>
             <p className="text-[11px] text-gray-400 mt-0.5">
-              {savedCount > 0 ? `${savedCount} place${savedCount > 1 ? 's' : ''} saved` : 'Visual memory for your world'}
+              {memory.length > 0 ? `${memory.length} place${memory.length > 1 ? 's' : ''} in memory` : 'Visual memory for your world'}
             </p>
           </div>
         </div>
 
-        <div className="flex bg-gray-900/80 rounded-full p-1 border border-gray-800">
+        {liveMode && (
           <button
-            onClick={() => setLiveMode(false)}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-              !liveMode ? 'bg-sky-600 text-white shadow' : 'text-gray-400 hover:text-gray-200'
-            }`}
+            onClick={exitLiveMode}
+            className="flex items-center gap-1.5 bg-sky-600 text-white text-xs font-medium px-3 py-1.5 rounded-full"
           >
-            <Eye className="w-3.5 h-3.5" />
-            Smart
-          </button>
-          <button
-            onClick={() => setLiveMode(true)}
-            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-medium transition-all ${
-              liveMode ? 'bg-sky-500 text-white shadow' : 'text-gray-400 hover:text-gray-200'
-            }`}
-          >
-            <Zap className="w-3.5 h-3.5" />
+            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
             Live
+            <X className="w-3.5 h-3.5 ml-1" />
           </button>
-        </div>
+        )}
       </header>
 
-      {/* Main View */}
+      {/* Camera View */}
       <div className="relative flex-1 min-h-0 bg-black overflow-hidden">
-        {/* Live camera (hidden when snapshot is active) */}
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className={`w-full h-full object-cover ${isSnapshot ? 'hidden' : 'block'}`}
+          className="w-full h-full object-cover"
         />
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Frozen Snapshot */}
-        {isSnapshot && snapshotUrl && (
-          <img
-            src={snapshotUrl}
-            alt="Snapshot"
-            className="w-full h-full object-cover"
-          />
-        )}
-
-        {/* Scanning animation overlay */}
-        {isAnalyzing && (
-          <div className="absolute inset-0 bg-black/30 flex flex-col items-center justify-center">
-            <div className="w-full h-1 bg-sky-500/80 absolute top-0 animate-[scan_1.4s_ease-in-out_infinite]" 
-                 style={{ boxShadow: '0 0 20px 4px rgba(14,165,233,0.6)' }} />
-            <p className="text-white text-sm font-medium bg-black/50 px-4 py-2 rounded-full backdrop-blur">
-              Analyzing scene...
-            </p>
-          </div>
-        )}
-
-        {/* Bounding boxes / pins on snapshot */}
+        {/* Bounding boxes */}
         {boxes.length > 0 && (
           <div className="absolute inset-0 pointer-events-none">
             {boxes.map((box, i) => (
               <div
                 key={i}
-                className="absolute border-2 border-sky-400 rounded-lg transition-all duration-300"
+                className="absolute border-2 border-sky-400 rounded-lg"
                 style={{
                   left: `${box.x}%`,
                   top: `${box.y}%`,
@@ -287,20 +299,35 @@ function App() {
           </div>
         )}
 
-        {/* Status pill */}
-        {!isAnalyzing && (
-          <div className="absolute top-4 left-4">
-            <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
-              {status}
+        {/* Status */}
+        <div className="absolute top-4 left-4">
+          <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
+            {status}
+          </div>
+        </div>
+
+        {/* Listening indicator */}
+        {listening && (
+          <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+            <Mic className="w-3.5 h-3.5 animate-pulse" />
+            Listening
+          </div>
+        )}
+
+        {/* Voice reply bubble */}
+        {reply && (
+          <div className="absolute bottom-28 left-4 right-4 flex justify-center">
+            <div className="bg-black/70 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
+              {reply}
             </div>
           </div>
         )}
 
-        {/* Empty hint (only on live camera) */}
-        {!isSnapshot && savedCount === 0 && (
-          <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none">
-            <div className="bg-black/60 backdrop-blur-md text-sm text-gray-200 px-4 py-2 rounded-full border border-white/10">
-              Point at a place and tap <span className="text-sky-400 font-medium">Remember</span>
+        {/* Transcript */}
+        {transcript && (
+          <div className="absolute bottom-20 left-4 right-4 flex justify-center">
+            <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
+              “{transcript}”
             </div>
           </div>
         )}
@@ -316,84 +343,38 @@ function App() {
         </div>
       )}
 
-      {/* Results from search */}
-      {results.length > 0 && !isSnapshot && (
-        <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-3 max-h-36 overflow-y-auto space-y-2">
-          {results.map((r, i) => (
-            <div key={i} className="flex items-center justify-between bg-gray-800/60 rounded-xl px-3.5 py-2.5">
-              <div>
-                <p className="font-medium text-[15px]">{r.object}</p>
-                <p className="text-xs text-gray-400">{r.location}</p>
-              </div>
-              <span className="text-sky-400 text-sm font-semibold">{Math.round(r.confidence * 100)}%</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Bottom - One main button */}
+      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-6 flex flex-col items-center gap-3">
+        <p className="text-xs text-gray-400">
+          {liveMode
+            ? 'Live Mode • Speak to find objects'
+            : 'Tap to save • Hold 1.5s for Live Mode'}
+        </p>
 
-      {/* Bottom Controls */}
-      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-4 space-y-3">
-        {/* Review mode: Save / Retake */}
-        {showReview ? (
-          <div className="flex gap-3">
-            <button
-              onClick={handleRetake}
-              className="flex-1 bg-gray-800 hover:bg-gray-700 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-medium border border-gray-700 transition"
-            >
-              <RotateCcw className="w-4 h-4" />
-              Retake
-            </button>
-            <button
-              onClick={handleSave}
-              className="flex-1 bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold shadow-lg shadow-sky-600/20 transition"
-            >
-              <Save className="w-4 h-4" />
-              Save to memory
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Search */}
-            <div className="flex gap-2.5">
-              <input
-                type="text"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleFind()}
-                placeholder="Where is my blue charger?"
-                disabled={isSnapshot}
-                className="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500 transition disabled:opacity-50"
-              />
-              <button
-                onClick={handleFind}
-                disabled={finding || !query.trim() || isSnapshot}
-                className="bg-sky-600 hover:bg-sky-500 disabled:opacity-40 px-5 rounded-2xl flex items-center justify-center transition"
-              >
-                <Search className="w-5 h-5" />
-              </button>
-            </div>
+        <button
+          onMouseDown={onPressStart}
+          onMouseUp={onPressEnd}
+          onMouseLeave={onPressEnd}
+          onTouchStart={onPressStart}
+          onTouchEnd={onPressEnd}
+          disabled={isProcessing}
+          className={`w-20 h-20 rounded-full flex items-center justify-center transition active:scale-95 shadow-xl ${
+            liveMode
+              ? 'bg-sky-500 shadow-sky-500/40'
+              : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/30'
+          } ${isProcessing ? 'opacity-60' : ''}`}
+        >
+          {listening ? (
+            <Mic className="w-8 h-8 text-white animate-pulse" />
+          ) : (
+            <Camera className="w-8 h-8 text-white" />
+          )}
+        </button>
 
-            {/* Remember button */}
-            <button
-              onClick={handleRemember}
-              disabled={isSnapshot || isAnalyzing}
-              className="w-full bg-gradient-to-r from-sky-600 to-blue-600 hover:from-sky-500 hover:to-blue-500 disabled:opacity-50 py-3.5 rounded-2xl flex items-center justify-center gap-2 text-sm font-semibold transition shadow-lg shadow-sky-600/20"
-            >
-              <Camera className="w-4 h-4" />
-              {isAnalyzing ? 'Analyzing...' : 'Remember this place'}
-            </button>
-          </>
+        {listening && (
+          <p className="text-xs text-sky-400">Say “Where is my car key?”</p>
         )}
       </div>
-
-      {/* Tiny CSS for scan line */}
-      <style>{`
-        @keyframes scan {
-          0% { top: 0%; opacity: 0.8; }
-          50% { opacity: 1; }
-          100% { top: 100%; opacity: 0.6; }
-        }
-      `}</style>
     </div>
   )
 }
