@@ -68,7 +68,7 @@ function App() {
   // Auto-hide reply
   useEffect(() => {
     if (reply) {
-      const t = setTimeout(() => setReply(null), 5000)
+      const t = setTimeout(() => setReply(null), 4500)
       return () => clearTimeout(t)
     }
   }, [reply])
@@ -135,38 +135,61 @@ function App() {
     recognition.start()
   }
 
-  // Handle voice query
+  // Smarter voice query handling
   const handleVoiceQuery = async (text: string) => {
     setIsProcessing(true)
-    setStatus('Searching...')
+    setStatus('Thinking...')
     setBoxes([])
     setReply(null)
 
-    // Simple mock logic for now
     const lower = text.toLowerCase()
-    const isFindQuery = lower.includes('where') || lower.includes('find') || lower.includes('key') || lower.includes('charger') || lower.includes('notebook')
+
+    // Detect find-related questions
+    const isFindQuery =
+      lower.includes('where') ||
+      lower.includes('find') ||
+      lower.includes('left') ||
+      lower.includes('keep') ||
+      lower.includes('put') ||
+      lower.includes('key') ||
+      lower.includes('charger') ||
+      lower.includes('notebook') ||
+      lower.includes('wallet') ||
+      lower.includes('phone')
+
+    await new Promise(r => setTimeout(r, 800))
 
     if (isFindQuery) {
-      // Fake detection
-      await new Promise(r => setTimeout(r, 900))
+      let label = 'object'
+      if (lower.includes('key')) label = 'car keys'
+      else if (lower.includes('charger')) label = 'blue charger'
+      else if (lower.includes('notebook')) label = 'black notebook'
+      else if (lower.includes('wallet')) label = 'wallet'
+      else if (lower.includes('phone')) label = 'phone'
 
       const fakeBox = {
-        label: lower.includes('key') ? 'car keys' : lower.includes('charger') ? 'blue charger' : 'object',
-        x: 30,
-        y: 35,
-        w: 28,
-        h: 22
+        label,
+        x: 28,
+        y: 32,
+        w: 30,
+        h: 24
       }
       setBoxes([fakeBox])
 
       if (memory.length > 0) {
-        setReply(`I can see the ${fakeBox.label} nearby. You also saved it earlier.`)
+        setReply(`I can see the ${label} nearby. You also saved a place earlier.`)
       } else {
-        setReply(`I can see the ${fakeBox.label} right here.`)
+        setReply(`I can see the ${label} right here.`)
       }
       setStatus('Found')
+    } else if (lower.includes('hello') || lower.includes('hi') || lower.includes('hey')) {
+      setReply("Hey! Just say something like ‘Where is my car key?’")
+      setStatus(liveMode ? 'Live Mode' : 'Ready')
+    } else if (lower.includes('thank')) {
+      setReply("You’re welcome!")
+      setStatus(liveMode ? 'Live Mode' : 'Ready')
     } else {
-      setReply("I heard you. Try saying: Where is my car key?")
+      setReply("I’m here to help you find things. Try asking ‘Where did I leave my keys?’")
       setStatus(liveMode ? 'Live Mode' : 'Ready')
     }
 
@@ -186,7 +209,6 @@ function App() {
       return
     }
 
-    // Save to memory (mock objects for now)
     const newItem: MemoryItem = {
       id: Date.now().toString(),
       imageUrl: captured.url,
@@ -240,18 +262,13 @@ function App() {
 
   return (
     <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden">
-      {/* Header */}
+      {/* Header - cleaner */}
       <header className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-gray-800/60 bg-gray-950/90 backdrop-blur-md">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
             <MapPin className="w-5 h-5 text-white" />
           </div>
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight leading-none">Find My Stuff</h1>
-            <p className="text-[11px] text-gray-400 mt-0.5">
-              {memory.length > 0 ? `${memory.length} place${memory.length > 1 ? 's' : ''} in memory` : 'Visual memory for your world'}
-            </p>
-          </div>
+          <h1 className="text-lg font-semibold tracking-tight">Find My Stuff</h1>
         </div>
 
         {liveMode && (
@@ -316,7 +333,7 @@ function App() {
 
         {/* Voice reply bubble */}
         {reply && (
-          <div className="absolute bottom-28 left-4 right-4 flex justify-center">
+          <div className="absolute bottom-24 left-4 right-4 flex justify-center">
             <div className="bg-black/70 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
               {reply}
             </div>
@@ -325,7 +342,7 @@ function App() {
 
         {/* Transcript */}
         {transcript && (
-          <div className="absolute bottom-20 left-4 right-4 flex justify-center">
+          <div className="absolute bottom-16 left-4 right-4 flex justify-center">
             <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
               “{transcript}”
             </div>
@@ -343,12 +360,10 @@ function App() {
         </div>
       )}
 
-      {/* Bottom - One main button */}
-      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 p-6 flex flex-col items-center gap-3">
-        <p className="text-xs text-gray-400">
-          {liveMode
-            ? 'Live Mode • Speak to find objects'
-            : 'Tap to save • Hold 1.5s for Live Mode'}
+      {/* Bottom - tighter */}
+      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 px-5 py-4 flex flex-col items-center gap-2.5">
+        <p className="text-xs text-gray-500">
+          {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
         </p>
 
         <button
@@ -358,22 +373,19 @@ function App() {
           onTouchStart={onPressStart}
           onTouchEnd={onPressEnd}
           disabled={isProcessing}
-          className={`w-20 h-20 rounded-full flex items-center justify-center transition active:scale-95 shadow-xl ${
+          className={`w-18 h-18 rounded-full flex items-center justify-center transition active:scale-95 shadow-xl ${
             liveMode
               ? 'bg-sky-500 shadow-sky-500/40'
               : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/30'
           } ${isProcessing ? 'opacity-60' : ''}`}
+          style={{ width: '72px', height: '72px' }}
         >
           {listening ? (
-            <Mic className="w-8 h-8 text-white animate-pulse" />
+            <Mic className="w-7 h-7 text-white animate-pulse" />
           ) : (
-            <Camera className="w-8 h-8 text-white" />
+            <Camera className="w-7 h-7 text-white" />
           )}
         </button>
-
-        {listening && (
-          <p className="text-xs text-sky-400">Say “Where is my car key?”</p>
-        )}
       </div>
     </div>
   )
