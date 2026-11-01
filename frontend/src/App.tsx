@@ -144,7 +144,6 @@ function App() {
 
     const lower = text.toLowerCase()
 
-    // Detect find-related questions
     const isFindQuery =
       lower.includes('where') ||
       lower.includes('find') ||
@@ -222,7 +221,6 @@ function App() {
     setStatus('Ready')
     setIsProcessing(false)
 
-    // Auto start voice
     setTimeout(() => startListening(), 400)
   }
 
@@ -234,7 +232,6 @@ function App() {
     setTimeout(() => startListening(), 300)
   }
 
-  // Button press handlers
   const onPressStart = () => {
     isLongPress.current = false
     pressTimer.current = setTimeout(() => {
@@ -261,9 +258,9 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden">
-      {/* Header - cleaner */}
-      <header className="flex-shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-gray-800/60 bg-gray-950/90 backdrop-blur-md">
+    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden relative">
+      {/* Header */}
+      <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3.5 bg-gradient-to-b from-black/70 to-transparent">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
             <MapPin className="w-5 h-5 text-white" />
@@ -283,8 +280,8 @@ function App() {
         )}
       </header>
 
-      {/* Camera View */}
-      <div className="relative flex-1 min-h-0 bg-black overflow-hidden">
+      {/* Full camera */}
+      <div className="relative flex-1 bg-black">
         <video
           ref={videoRef}
           autoPlay
@@ -317,7 +314,7 @@ function App() {
         )}
 
         {/* Status */}
-        <div className="absolute top-4 left-4">
+        <div className="absolute top-20 left-4 z-10">
           <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
             {status}
           </div>
@@ -325,15 +322,15 @@ function App() {
 
         {/* Listening indicator */}
         {listening && (
-          <div className="absolute top-4 right-4 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+          <div className="absolute top-20 right-4 z-10 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
             <Mic className="w-3.5 h-3.5 animate-pulse" />
             Listening
           </div>
         )}
 
-        {/* Voice reply bubble */}
+        {/* Voice reply */}
         {reply && (
-          <div className="absolute bottom-24 left-4 right-4 flex justify-center">
+          <div className="absolute bottom-36 left-4 right-4 flex justify-center z-10">
             <div className="bg-black/70 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
               {reply}
             </div>
@@ -342,12 +339,40 @@ function App() {
 
         {/* Transcript */}
         {transcript && (
-          <div className="absolute bottom-16 left-4 right-4 flex justify-center">
+          <div className="absolute bottom-28 left-4 right-4 flex justify-center z-10">
             <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
               “{transcript}”
             </div>
           </div>
         )}
+
+        {/* Floating button - no black bar */}
+        <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-2 z-20">
+          <p className="text-xs text-white/70 bg-black/40 backdrop-blur-sm px-3 py-1 rounded-full">
+            {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
+          </p>
+
+          <button
+            onMouseDown={onPressStart}
+            onMouseUp={onPressEnd}
+            onMouseLeave={onPressEnd}
+            onTouchStart={onPressStart}
+            onTouchEnd={onPressEnd}
+            disabled={isProcessing}
+            className={`rounded-full flex items-center justify-center transition active:scale-95 shadow-2xl ${
+              liveMode
+                ? 'bg-sky-500 shadow-sky-500/50'
+                : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/40'
+            } ${isProcessing ? 'opacity-60' : ''}`}
+            style={{ width: '72px', height: '72px' }}
+          >
+            {listening ? (
+              <Mic className="w-7 h-7 text-white animate-pulse" />
+            ) : (
+              <Camera className="w-7 h-7 text-white" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Toast */}
@@ -359,34 +384,6 @@ function App() {
           </div>
         </div>
       )}
-
-      {/* Bottom - tighter */}
-      <div className="flex-shrink-0 bg-gray-900 border-t border-gray-800 px-5 py-4 flex flex-col items-center gap-2.5">
-        <p className="text-xs text-gray-500">
-          {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
-        </p>
-
-        <button
-          onMouseDown={onPressStart}
-          onMouseUp={onPressEnd}
-          onMouseLeave={onPressEnd}
-          onTouchStart={onPressStart}
-          onTouchEnd={onPressEnd}
-          disabled={isProcessing}
-          className={`w-18 h-18 rounded-full flex items-center justify-center transition active:scale-95 shadow-xl ${
-            liveMode
-              ? 'bg-sky-500 shadow-sky-500/40'
-              : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/30'
-          } ${isProcessing ? 'opacity-60' : ''}`}
-          style={{ width: '72px', height: '72px' }}
-        >
-          {listening ? (
-            <Mic className="w-7 h-7 text-white animate-pulse" />
-          ) : (
-            <Camera className="w-7 h-7 text-white" />
-          )}
-        </button>
-      </div>
     </div>
   )
 }
