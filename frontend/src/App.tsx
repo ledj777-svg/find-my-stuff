@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { MapPin, Check, Mic, Camera, X } from 'lucide-react'
+import { MapPin, Check, Mic, Camera, X, Key, Settings } from 'lucide-react'
 
 interface MemoryItem {
   id: string
@@ -34,6 +34,22 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [reply, setReply] = useState<string | null>(null)
 
+  // API Key state
+  const [apiKey, setApiKey] = useState('')
+  const [showKeyModal, setShowKeyModal] = useState(false)
+  const [tempKey, setTempKey] = useState('')
+
+  // Load saved API key on start
+  useEffect(() => {
+    const saved = localStorage.getItem('meta_api_key')
+    if (saved) {
+      setApiKey(saved)
+    } else {
+      setShowKeyModal(true)
+    }
+  }, [])
+
+  // Start camera
   useEffect(() => {
     async function startCamera() {
       try {
@@ -69,6 +85,14 @@ function App() {
       return () => clearTimeout(t)
     }
   }, [reply])
+
+  const saveApiKey = () => {
+    if (!tempKey.trim()) return
+    localStorage.setItem('meta_api_key', tempKey.trim())
+    setApiKey(tempKey.trim())
+    setShowKeyModal(false)
+    setToast('API key saved')
+  }
 
   const captureFrame = (): Promise<{ blob: Blob; url: string } | null> => {
     return new Promise((resolve) => {
@@ -244,6 +268,51 @@ function App() {
 
   return (
     <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
+      {/* API Key Modal */}
+      {showKeyModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-6">
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-md space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-sky-600 flex items-center justify-center">
+                <Key className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold">Meta API Key</h2>
+                <p className="text-xs text-gray-400">Required to use real models</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-300">
+              Paste your Meta Model API key below. It is stored only on your device.
+            </p>
+
+            <input
+              type="password"
+              value={tempKey}
+              onChange={(e) => setTempKey(e.target.value)}
+              placeholder="Enter your Meta API key"
+              className="w-full bg-gray-800 border border-gray-600 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-sky-500"
+            />
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowKeyModal(false)}
+                className="flex-1 bg-gray-800 hover:bg-gray-700 py-3 rounded-xl text-sm font-medium"
+              >
+                Skip for now
+              </button>
+              <button
+                onClick={saveApiKey}
+                disabled={!tempKey.trim()}
+                className="flex-1 bg-sky-600 hover:bg-sky-500 disabled:opacity-40 py-3 rounded-xl text-sm font-semibold"
+              >
+                Save Key
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <header className="flex-shrink-0 flex items-center justify-between px-5 py-3 bg-black/80 backdrop-blur-md z-30">
         <div className="flex items-center gap-3">
@@ -253,19 +322,31 @@ function App() {
           <h1 className="text-lg font-semibold tracking-tight">Find My Stuff</h1>
         </div>
 
-        {liveMode && (
+        <div className="flex items-center gap-2">
+          {liveMode && (
+            <button
+              onClick={exitLiveMode}
+              className="flex items-center gap-1.5 bg-sky-600 text-white text-xs font-medium px-3 py-1.5 rounded-full"
+            >
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+              Live
+              <X className="w-3.5 h-3.5 ml-1" />
+            </button>
+          )}
           <button
-            onClick={exitLiveMode}
-            className="flex items-center gap-1.5 bg-sky-600 text-white text-xs font-medium px-3 py-1.5 rounded-full"
+            onClick={() => {
+              setTempKey(apiKey)
+              setShowKeyModal(true)
+            }}
+            className="p-2 rounded-full bg-gray-800 hover:bg-gray-700"
+            title="API Key settings"
           >
-            <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
-            Live
-            <X className="w-3.5 h-3.5 ml-1" />
+            <Settings className="w-4 h-4 text-gray-300" />
           </button>
-        )}
+        </div>
       </header>
 
-      {/* Camera area - takes almost all space */}
+      {/* Camera area */}
       <div className="relative flex-1 min-h-0">
         <video
           ref={videoRef}
@@ -276,7 +357,6 @@ function App() {
         />
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Boxes */}
         {boxes.length > 0 && (
           <div className="absolute inset-0 pointer-events-none z-10">
             {boxes.map((box, i) => (
@@ -298,14 +378,12 @@ function App() {
           </div>
         )}
 
-        {/* Status */}
         <div className="absolute top-4 left-4 z-20">
           <div className="bg-black/60 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
             {status}
           </div>
         </div>
 
-        {/* Listening */}
         {listening && (
           <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
             <Mic className="w-3.5 h-3.5 animate-pulse" />
@@ -313,7 +391,6 @@ function App() {
           </div>
         )}
 
-        {/* Reply */}
         {reply && (
           <div className="absolute bottom-28 left-4 right-4 flex justify-center z-20">
             <div className="bg-black/75 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
@@ -322,7 +399,6 @@ function App() {
           </div>
         )}
 
-        {/* Transcript */}
         {transcript && (
           <div className="absolute bottom-20 left-4 right-4 flex justify-center z-20">
             <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
@@ -331,7 +407,7 @@ function App() {
           </div>
         )}
 
-        {/* Floating button - minimal, over the camera */}
+        {/* Floating button */}
         <div className="absolute bottom-5 left-0 right-0 flex flex-col items-center gap-1.5 z-30">
           <p className="text-[11px] text-white/70 bg-black/50 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
             {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
@@ -360,7 +436,6 @@ function App() {
         </div>
       </div>
 
-      {/* Toast */}
       {toast && (
         <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50">
           <div className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-full shadow-lg">
