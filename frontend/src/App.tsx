@@ -265,7 +265,7 @@ function App() {
         )}
       </header>
 
-      {/* Camera area */}
+      {/* Camera area - takes almost all space */}
       <div className="relative flex-1 min-h-0">
         <video
           ref={videoRef}
@@ -315,7 +315,7 @@ function App() {
 
         {/* Reply */}
         {reply && (
-          <div className="absolute bottom-32 left-4 right-4 flex justify-center z-20">
+          <div className="absolute bottom-28 left-4 right-4 flex justify-center z-20">
             <div className="bg-black/75 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
               {reply}
             </div>
@@ -324,40 +324,40 @@ function App() {
 
         {/* Transcript */}
         {transcript && (
-          <div className="absolute bottom-24 left-4 right-4 flex justify-center z-20">
+          <div className="absolute bottom-20 left-4 right-4 flex justify-center z-20">
             <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
               “{transcript}”
             </div>
           </div>
         )}
-      </div>
 
-      {/* Bottom floating button area - always visible */}
-      <div className="flex-shrink-0 flex flex-col items-center gap-2 pb-6 pt-3 bg-gradient-to-t from-black/90 to-transparent z-30">
-        <p className="text-xs text-white/60">
-          {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
-        </p>
+        {/* Floating button - minimal, over the camera */}
+        <div className="absolute bottom-5 left-0 right-0 flex flex-col items-center gap-1.5 z-30">
+          <p className="text-[11px] text-white/70 bg-black/50 backdrop-blur-sm px-2.5 py-0.5 rounded-full">
+            {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
+          </p>
 
-        <button
-          onMouseDown={onPressStart}
-          onMouseUp={onPressEnd}
-          onMouseLeave={onPressEnd}
-          onTouchStart={onPressStart}
-          onTouchEnd={onPressEnd}
-          disabled={isProcessing}
-          className={`rounded-full flex items-center justify-center transition active:scale-95 shadow-2xl ${
-            liveMode
-              ? 'bg-sky-500 shadow-sky-500/50'
-              : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/40'
-          } ${isProcessing ? 'opacity-60' : ''}`}
-          style={{ width: '72px', height: '72px' }}
-        >
-          {listening ? (
-            <Mic className="w-7 h-7 text-white animate-pulse" />
-          ) : (
-            <Camera className="w-7 h-7 text-white" />
-          )}
-        </button>
+          <button
+            onMouseDown={onPressStart}
+            onMouseUp={onPressEnd}
+            onMouseLeave={onPressEnd}
+            onTouchStart={onPressStart}
+            onTouchEnd={onPressEnd}
+            disabled={isProcessing}
+            className={`rounded-full flex items-center justify-center transition active:scale-95 shadow-2xl ${
+              liveMode
+                ? 'bg-sky-500 shadow-sky-500/50'
+                : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/40'
+            } ${isProcessing ? 'opacity-60' : ''}`}
+            style={{ width: '68px', height: '68px' }}
+          >
+            {listening ? (
+              <Mic className="w-6 h-6 text-white animate-pulse" />
+            ) : (
+              <Camera className="w-6 h-6 text-white" />
+            )}
+          </button>
+        </div>
       </div>
 
       {/* Toast */}
