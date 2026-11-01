@@ -20,7 +20,7 @@ interface DetectedBox {
 function App() {
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const pressTimer = useRef<NodeJS.Timeout | null>(null)
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isLongPress = useRef(false)
 
   const [stream, setStream] = useState<MediaStream | null>(null)
@@ -34,7 +34,6 @@ function App() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [reply, setReply] = useState<string | null>(null)
 
-  // Start camera
   useEffect(() => {
     async function startCamera() {
       try {
@@ -57,7 +56,6 @@ function App() {
     }
   }, [])
 
-  // Auto-hide toast
   useEffect(() => {
     if (toast) {
       const t = setTimeout(() => setToast(null), 2500)
@@ -65,7 +63,6 @@ function App() {
     }
   }, [toast])
 
-  // Auto-hide reply
   useEffect(() => {
     if (reply) {
       const t = setTimeout(() => setReply(null), 4500)
@@ -73,7 +70,6 @@ function App() {
     }
   }, [reply])
 
-  // Capture current frame
   const captureFrame = (): Promise<{ blob: Blob; url: string } | null> => {
     return new Promise((resolve) => {
       if (!videoRef.current || !canvasRef.current) {
@@ -97,7 +93,6 @@ function App() {
     })
   }
 
-  // Start voice recognition
   const startListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     if (!SpeechRecognition) {
@@ -135,7 +130,6 @@ function App() {
     recognition.start()
   }
 
-  // Smarter voice query handling
   const handleVoiceQuery = async (text: string) => {
     setIsProcessing(true)
     setStatus('Thinking...')
@@ -166,14 +160,7 @@ function App() {
       else if (lower.includes('wallet')) label = 'wallet'
       else if (lower.includes('phone')) label = 'phone'
 
-      const fakeBox = {
-        label,
-        x: 28,
-        y: 32,
-        w: 30,
-        h: 24
-      }
-      setBoxes([fakeBox])
+      setBoxes([{ label, x: 28, y: 32, w: 30, h: 24 }])
 
       if (memory.length > 0) {
         setReply(`I can see the ${label} nearby. You also saved a place earlier.`)
@@ -195,7 +182,6 @@ function App() {
     setIsProcessing(false)
   }
 
-  // Short press = Capture + save + start voice
   const handleShortPress = async () => {
     setIsProcessing(true)
     setStatus('Saving...')
@@ -224,7 +210,6 @@ function App() {
     setTimeout(() => startListening(), 400)
   }
 
-  // Long press = Live Mode + voice
   const handleLongPress = () => {
     setLiveMode(true)
     setStatus('Live Mode')
@@ -258,9 +243,9 @@ function App() {
   }
 
   return (
-    <div className="h-screen bg-gray-950 text-white flex flex-col overflow-hidden relative">
+    <div className="h-screen w-screen bg-black text-white flex flex-col overflow-hidden">
       {/* Header */}
-      <header className="absolute top-0 left-0 right-0 z-20 flex items-center justify-between px-5 py-3.5 bg-gradient-to-b from-black/70 to-transparent">
+      <header className="flex-shrink-0 flex items-center justify-between px-5 py-3 bg-black/80 backdrop-blur-md z-30">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-400 to-blue-600 flex items-center justify-center shadow-lg shadow-sky-500/25">
             <MapPin className="w-5 h-5 text-white" />
@@ -280,20 +265,20 @@ function App() {
         )}
       </header>
 
-      {/* Full camera */}
-      <div className="relative flex-1 bg-black">
+      {/* Camera area */}
+      <div className="relative flex-1 min-h-0">
         <video
           ref={videoRef}
           autoPlay
           playsInline
           muted
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover"
         />
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* Bounding boxes */}
+        {/* Boxes */}
         {boxes.length > 0 && (
-          <div className="absolute inset-0 pointer-events-none">
+          <div className="absolute inset-0 pointer-events-none z-10">
             {boxes.map((box, i) => (
               <div
                 key={i}
@@ -314,24 +299,24 @@ function App() {
         )}
 
         {/* Status */}
-        <div className="absolute top-20 left-4 z-10">
-          <div className="bg-black/55 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
+        <div className="absolute top-4 left-4 z-20">
+          <div className="bg-black/60 backdrop-blur-md text-sm px-3.5 py-1.5 rounded-full border border-white/10">
             {status}
           </div>
         </div>
 
-        {/* Listening indicator */}
+        {/* Listening */}
         {listening && (
-          <div className="absolute top-20 right-4 z-10 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-2 bg-red-500/90 text-white text-xs font-bold px-3 py-1.5 rounded-full">
             <Mic className="w-3.5 h-3.5 animate-pulse" />
             Listening
           </div>
         )}
 
-        {/* Voice reply */}
+        {/* Reply */}
         {reply && (
-          <div className="absolute bottom-36 left-4 right-4 flex justify-center z-10">
-            <div className="bg-black/70 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
+          <div className="absolute bottom-32 left-4 right-4 flex justify-center z-20">
+            <div className="bg-black/75 backdrop-blur-md text-sm text-white px-5 py-3 rounded-2xl border border-white/10 max-w-sm text-center">
               {reply}
             </div>
           </div>
@@ -339,40 +324,40 @@ function App() {
 
         {/* Transcript */}
         {transcript && (
-          <div className="absolute bottom-28 left-4 right-4 flex justify-center z-10">
+          <div className="absolute bottom-24 left-4 right-4 flex justify-center z-20">
             <div className="bg-sky-600/80 text-white text-xs px-3 py-1.5 rounded-full">
               “{transcript}”
             </div>
           </div>
         )}
+      </div>
 
-        {/* Floating button - no black bar */}
-        <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-2 z-20">
-          <p className="text-xs text-white/70 bg-black/40 backdrop-blur-sm px-3 py-1 rounded-full">
-            {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
-          </p>
+      {/* Bottom floating button area - always visible */}
+      <div className="flex-shrink-0 flex flex-col items-center gap-2 pb-6 pt-3 bg-gradient-to-t from-black/90 to-transparent z-30">
+        <p className="text-xs text-white/60">
+          {liveMode ? 'Live Mode • Just speak' : 'Tap to save • Hold for Live Mode'}
+        </p>
 
-          <button
-            onMouseDown={onPressStart}
-            onMouseUp={onPressEnd}
-            onMouseLeave={onPressEnd}
-            onTouchStart={onPressStart}
-            onTouchEnd={onPressEnd}
-            disabled={isProcessing}
-            className={`rounded-full flex items-center justify-center transition active:scale-95 shadow-2xl ${
-              liveMode
-                ? 'bg-sky-500 shadow-sky-500/50'
-                : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/40'
-            } ${isProcessing ? 'opacity-60' : ''}`}
-            style={{ width: '72px', height: '72px' }}
-          >
-            {listening ? (
-              <Mic className="w-7 h-7 text-white animate-pulse" />
-            ) : (
-              <Camera className="w-7 h-7 text-white" />
-            )}
-          </button>
-        </div>
+        <button
+          onMouseDown={onPressStart}
+          onMouseUp={onPressEnd}
+          onMouseLeave={onPressEnd}
+          onTouchStart={onPressStart}
+          onTouchEnd={onPressEnd}
+          disabled={isProcessing}
+          className={`rounded-full flex items-center justify-center transition active:scale-95 shadow-2xl ${
+            liveMode
+              ? 'bg-sky-500 shadow-sky-500/50'
+              : 'bg-gradient-to-br from-sky-500 to-blue-600 shadow-sky-600/40'
+          } ${isProcessing ? 'opacity-60' : ''}`}
+          style={{ width: '72px', height: '72px' }}
+        >
+          {listening ? (
+            <Mic className="w-7 h-7 text-white animate-pulse" />
+          ) : (
+            <Camera className="w-7 h-7 text-white" />
+          )}
+        </button>
       </div>
 
       {/* Toast */}
