@@ -331,14 +331,7 @@ All endpoints support an optional `X-API-Key` header for user-provided Meta API 
 
 ---
 
-## Team
 
-| Name            | Role                        |
-|-----------------|-----------------------------|
-| ledj777-svg     | Builder & Developer         |
-| Grok            | Team Lead & Technical Partner |
-
----
 
 ## Acknowledgements
 
